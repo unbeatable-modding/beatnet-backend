@@ -1,4 +1,4 @@
-export function handleRequest(request: Request, discordReady: boolean): Response {
+export function handleRequest(request: Request, discordReady: boolean, storageReady = true): Response {
   if (request.method !== "GET") {
     return Response.json({ error: "method_not_allowed" }, { status: 405, headers: { Allow: "GET" } });
   }
@@ -11,8 +11,8 @@ export function handleRequest(request: Request, discordReady: boolean): Response
 
   if (path === "/ready") {
     return Response.json(
-      { service: "beatnet-backend", discord: discordReady ? "connected" : "disconnected" },
-      { status: discordReady ? 200 : 503, headers: { "Cache-Control": "no-store" } },
+      { service: "beatnet-backend", discord: discordReady ? "connected" : "disconnected", storage: storageReady ? "ready" : "unavailable" },
+      { status: discordReady && storageReady ? 200 : 503, headers: { "Cache-Control": "no-store" } },
     );
   }
 

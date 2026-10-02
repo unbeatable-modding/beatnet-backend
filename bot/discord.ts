@@ -1,7 +1,10 @@
 import { ChannelType, Client, Events, GatewayIntentBits, PermissionFlagsBits } from "discord.js";
 import { describeError, type Config } from "../server/config";
+import type { Submissions } from "../server/submissions";
+import type { Uploads } from "../server/uploads";
+import { createReview } from "./review";
 
-export async function connectDiscord(config: Config) {
+export async function connectDiscord(config: Config, submissions: Submissions, uploads: Uploads) {
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
   });
@@ -11,6 +14,7 @@ export async function connectDiscord(config: Config) {
   });
 
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  let review: ReturnType<typeof createReview> | undefined;
 
   const ready = new Promise<void>((resolve, reject) => {
     client.once(Events.ClientReady, () => resolve());
@@ -43,16 +47,27 @@ export async function connectDiscord(config: Config) {
       PermissionFlagsBits.AttachFiles,
     ];
 
-    if (!submissionChannel.permissionsFor(member)?.has(readPermissions)) {
-      throw new Error("The bot needs View Channel and Read Message History in the submission channel");
+    if (!submissionChannel.permissionsFor(member)?.has([...readPermissions, PermissionFlagsBits.AddReactions])) {
+      throw new Error("The bot needs View Channel, Read Message History and Add Reactions in the submission channel");
     }
 
-    if (!reviewChannel.permissionsFor(member)?.has(reviewPermissions)) {
-      throw new Error("The bot is missing required read or message permissions in the review channel");
+    const missing = reviewPermissions.filter((permission) => !reviewChannel.permissionsFor(member)?.has(permission));
+    if (missing.length) {
+      const names = missing.map((permission) => Object.entries(PermissionFlagsBits).find(([, value]) => value === permission)?.[0]);
+      throw new Error(`Missing review channel permissions: ${names.join(", ")}`);
     }
 
-    return { client, guild, submissionChannel, reviewChannel };
+    review = createReview(config, submissions, uploads, submissionChannel, reviewChannel);
+    await review.recover();
+    const handlers = review;
+    client.on(Events.MessageCreate, (message) => handlers.run(() => handlers.receive(message)));
+    client.on(Events.InteractionCreate, (interaction) => {
+      if (interaction.isButton()) handlers.run(() => handlers.click(interaction));
+    });
+
+    return { client, guild, submissionChannel, reviewChannel, review };
   } catch (error) {
+    await review?.stop();
     await client.destroy();
     throw error;
   } finally {

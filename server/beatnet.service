@@ -10,9 +10,10 @@ Group=ubuntu
 WorkingDirectory=/home/ubuntu/beatnet-backend
 ExecStart=/home/ubuntu/.bun/bin/bun --env-file=/home/ubuntu/.config/beatnet/backend.env server/index.ts
 Environment=NODE_ENV=production
+Environment=DATA_DIR=/home/ubuntu/.local/share/beatnet
 Restart=on-failure
 RestartSec=10
-TimeoutStopSec=20
+TimeoutStopSec=330
 
 [Install]
 WantedBy=multi-user.target
