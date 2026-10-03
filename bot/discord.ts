@@ -1,20 +1,20 @@
 import { ChannelType, Client, Events, GatewayIntentBits, PermissionFlagsBits } from "discord.js";
 import { describeError, type Config } from "../server/config";
 import type { Submissions } from "../server/submissions";
-import type { Uploads } from "../server/uploads";
-import { createReview } from "./review";
+import { Review } from "./review";
+import type { Library } from "../server/library";
 
-export async function connectDiscord(config: Config, submissions: Submissions, uploads: Uploads) {
+export async function connectDiscord(config: Config, submissions: Submissions, library: Library) {
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
   });
 
   client.on(Events.Error, (error) => {
-    console.error(`Discord error ${describeError(error, config)}`);
+    console.error(`discord error ${describeError(error, config)}`);
   });
 
   let timeout: ReturnType<typeof setTimeout> | undefined;
-  let review: ReturnType<typeof createReview> | undefined;
+  let review: Review | undefined;
 
   const ready = new Promise<void>((resolve, reject) => {
     client.once(Events.ClientReady, () => resolve());
@@ -23,11 +23,8 @@ export async function connectDiscord(config: Config, submissions: Submissions, u
 
   try {
     await Promise.all([client.login(config.discordToken), ready]);
-    if (timeout) clearTimeout(timeout);
-
-    const application = await client.application?.fetch();
-    if (application?.id !== config.applicationId) {
-      throw new Error("The bot token and application ID do not belong to the same application");
+    if (timeout) {
+      clearTimeout(timeout);
     }
 
     const guild = await client.guilds.fetch(config.guildId);
@@ -53,24 +50,31 @@ export async function connectDiscord(config: Config, submissions: Submissions, u
 
     const missing = reviewPermissions.filter((permission) => !reviewChannel.permissionsFor(member)?.has(permission));
     if (missing.length) {
-      const names = missing.map((permission) => Object.entries(PermissionFlagsBits).find(([, value]) => value === permission)?.[0]);
+      const names = missing.map((permission) => {
+        const entry = Object.entries(PermissionFlagsBits).find(([, value]) => value === permission);
+        return entry?.[0];
+      });
       throw new Error(`Missing review channel permissions: ${names.join(", ")}`);
     }
 
-    review = createReview(config, submissions, uploads, submissionChannel, reviewChannel);
-    await review.recover();
+    review = new Review(config, submissions, library, submissionChannel, reviewChannel);
+    review.recover();
     const handlers = review;
     client.on(Events.MessageCreate, (message) => handlers.run(() => handlers.receive(message)));
     client.on(Events.InteractionCreate, (interaction) => {
-      if (interaction.isButton()) handlers.run(() => handlers.click(interaction));
+      if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) {
+        handlers.run(() => handlers.interact(interaction));
+      }
     });
 
-    return { client, guild, submissionChannel, reviewChannel, review };
+    return { client, review };
   } catch (error) {
     await review?.stop();
     await client.destroy();
     throw error;
   } finally {
-    if (timeout) clearTimeout(timeout);
+    if (timeout) {
+      clearTimeout(timeout);
+    }
   }
 }

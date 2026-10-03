@@ -4,16 +4,14 @@ const discordId = z.string().regex(/^\d{17,20}$/);
 
 const envSchema = z.object({
   DISCORD_TOKEN: z.string().trim().min(1),
-  DISCORD_APPLICATION_ID: discordId,
   DISCORD_GUILD_ID: discordId,
   DISCORD_SUBMISSION_CHANNEL_ID: discordId,
   DISCORD_REVIEW_CHANNEL_ID: discordId,
-  DISCORD_OWNER_ID: discordId,
   HTTP_HOST: z.enum(["127.0.0.1", "0.0.0.0", "::1", "::"]).default("127.0.0.1"),
   HTTP_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   DATA_DIR: z.string().trim().min(1).default("./data"),
-  MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(2048).default(512),
-  UPLOAD_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(3600).default(300),
+  MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(2048).default(100),
+  UPLOAD_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(3600).default(30),
 });
 
 export function loadConfig(env: Record<string, string | undefined> = process.env) {
@@ -32,11 +30,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
 
   return {
     discordToken: values.DISCORD_TOKEN,
-    applicationId: values.DISCORD_APPLICATION_ID,
     guildId: values.DISCORD_GUILD_ID,
     submissionChannelId: values.DISCORD_SUBMISSION_CHANNEL_ID,
     reviewChannelId: values.DISCORD_REVIEW_CHANNEL_ID,
-    ownerId: values.DISCORD_OWNER_ID,
     httpHost: values.HTTP_HOST,
     httpPort: values.HTTP_PORT,
     dataDir: values.DATA_DIR,

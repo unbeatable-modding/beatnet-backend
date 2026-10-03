@@ -11,7 +11,11 @@ export function handleRequest(request: Request, discordReady: boolean, storageRe
 
   if (path === "/ready") {
     return Response.json(
-      { service: "beatnet-backend", discord: discordReady ? "connected" : "disconnected", storage: storageReady ? "ready" : "unavailable" },
+      {
+        service: "beatnet-backend",
+        discord: discordReady ? "connected" : "disconnected",
+        storage: storageReady ? "ready" : "unavailable",
+      },
       { status: discordReady && storageReady ? 200 : 503, headers: { "Cache-Control": "no-store" } },
     );
   }
