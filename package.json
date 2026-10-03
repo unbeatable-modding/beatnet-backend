@@ -10,6 +10,7 @@
   "scripts": {
     "start": "bun server/index.ts",
     "dev": "bun --watch server/index.ts",
+    "remove": "bun server/remove.ts",
     "typecheck": "bun ./node_modules/typescript/bin/tsc --noEmit"
   },
   "dependencies": {
