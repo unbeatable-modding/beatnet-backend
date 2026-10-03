@@ -17,6 +17,13 @@ export type StoredFile = {
   sha256: string;
   file: string;
 };
+export type FileRecord = {
+  id: string;
+  name: string;
+  size: number;
+  sha256: string;
+  storage_key: string;
+};
 export type Submission = {
   id: string;
   guild_id: string;
@@ -55,6 +62,12 @@ export class Submissions {
 
   get(id: string) {
     return this.db.query<Submission, [string]>("SELECT * FROM submissions WHERE id = ?").get(id);
+  }
+
+  files(id: string) {
+    return this.db.query<FileRecord, [string]>(
+      "SELECT attachment_id AS id, name, size, sha256, storage_key FROM files WHERE submission_id = ? ORDER BY attachment_id",
+    ).all(id);
   }
 
   record(input: {

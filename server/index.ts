@@ -5,6 +5,7 @@ import { openSubmissions, type Submissions } from "./submissions";
 import { openUploads, type Uploads } from "./uploads";
 import { Library } from "./library";
 import { acquireRuntime } from "./runtime";
+import { Catalog } from "./catalog";
 
 let config: Config | undefined;
 let connection: Awaited<ReturnType<typeof connectDiscord>> | undefined;
@@ -35,6 +36,7 @@ try {
   uploads = await openUploads(submissions.root, config);
   library = new Library(submissions, uploads);
   await library.recover();
+  const catalog = new Catalog(submissions, uploads);
   connection = await connectDiscord(config, submissions, library);
   const discord = connection;
 
@@ -44,7 +46,7 @@ try {
     fetch: async (request) => {
       const discordReady = discord.client.isReady();
       const storageReady = submissions!.isReady() && await uploads!.isReady();
-      return handleRequest(request, discordReady, storageReady);
+      return handleRequest(request, discordReady, storageReady, catalog);
     },
   });
 
