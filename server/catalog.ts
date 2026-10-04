@@ -1,15 +1,24 @@
 import { basename } from "node:path";
-import type { Project } from "./registry";
+import type { Metadata, Project } from "./registry";
+import { extractAudio, previewClip } from "./preview";
 import type { Submissions } from "./submissions";
 import type { Uploads } from "./uploads";
 
 function describeBeatmap(project: Project) {
+  const info = project.chart_info ? JSON.parse(project.chart_info) as Metadata["chartInfo"] : undefined;
   return {
     id: project.id,
     title: project.title,
     artist: project.artist,
     creator: project.creator,
     submitter: project.submitter,
+    difficulties: project.difficulties ? JSON.parse(project.difficulties) as string[] : [],
+    levels: info?.levels ?? {},
+    difficultyLabels: info?.labels ?? {},
+    preview: info?.preview ? {
+      url: `/api/beatmaps/${project.id}/revisions/${project.current_revision_id}/preview`,
+      start: info.preview.start,
+    } : null,
     revision: { id: project.current_revision_id, number: project.number },
     createdAt: project.created_at,
     updatedAt: project.updated_at,
@@ -68,5 +77,19 @@ export class Catalog {
       return null;
     }
     return { ...file, path: this.uploads.path(revision.submission_id, basename(file.storage_key)) };
+  }
+
+  async audio(projectId: string, revisionId: string) {
+    const project = this.submissions.registry.get(projectId);
+    if (!project || project.current_revision_id !== revisionId || !project.chart_info) {
+      return null;
+    }
+    const info = JSON.parse(project.chart_info) as Metadata["chartInfo"];
+    if (!info?.preview) {
+      return null;
+    }
+    const stored = this.download(projectId, revisionId, info.preview.fileId);
+    const audio = stored ? await extractAudio(stored.path, stored.sha256, info.preview.path) : null;
+    return audio ? previewClip(audio, info.preview.start) : null;
   }
 }

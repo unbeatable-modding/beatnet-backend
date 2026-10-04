@@ -43,7 +43,10 @@ try {
   server = Bun.serve({
     hostname: config.httpHost,
     port: config.httpPort,
-    fetch: async (request) => {
+    fetch: async (request, http) => {
+      if (new URL(request.url).pathname.endsWith("/preview")) {
+        http.timeout(request, 60);
+      }
       const discordReady = discord.client.isReady();
       const storageReady = submissions!.isReady() && await uploads!.isReady();
       return handleRequest(request, discordReady, storageReady, catalog);

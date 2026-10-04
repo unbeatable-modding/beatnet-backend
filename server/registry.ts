@@ -5,6 +5,12 @@ export type Metadata = {
   artist: string;
   creator: string;
   search: string;
+  difficulties?: string[];
+  chartInfo?: {
+    levels: Record<string, number>;
+    labels: Record<string, string>;
+    preview?: { fileId: string; path: string; start: number };
+  };
 };
 export type Project = {
   id: string;
@@ -15,6 +21,8 @@ export type Project = {
   current_revision_id: string;
   number: number;
   metadata_ready: number;
+  difficulties: string | null;
+  chart_info: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -62,7 +70,7 @@ function searchText(value: string) {
 
 export class Registry {
   private readonly projectQuery = `SELECT p.id, p.title, p.artist, p.creator, p.submitter, p.current_revision_id,
-    r.number, p.metadata_ready, p.created_at, p.updated_at FROM projects p JOIN revisions r ON r.id = p.current_revision_id`;
+    r.number, p.metadata_ready, p.difficulties, p.chart_info, p.created_at, p.updated_at FROM projects p JOIN revisions r ON r.id = p.current_revision_id`;
 
   constructor(private readonly db: Database) {
     this.db.transaction(() => this.createTables()).immediate();
@@ -79,6 +87,13 @@ export class Registry {
       metadata_ready INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     )`);
+    const projectColumns = this.db.query<{ name: string }, []>("PRAGMA table_info(projects)").all();
+    if (!projectColumns.some((column) => column.name === "difficulties")) {
+      this.db.run("ALTER TABLE projects ADD COLUMN difficulties TEXT");
+    }
+    if (!projectColumns.some((column) => column.name === "chart_info")) {
+      this.db.run("ALTER TABLE projects ADD COLUMN chart_info TEXT");
+    }
     const columns = this.db.query<{ name: string }, []>("PRAGMA table_info(submissions)").all();
     const additions = {
       target_project_id: "TEXT REFERENCES projects(id)",
@@ -199,8 +214,9 @@ export class Registry {
     ]);
     this.db.run(
       `UPDATE projects SET title = ?, artist = ?, creator = ?, search_text = ?,
-       current_revision_id = ?, updated_at = ?, metadata_ready = ? WHERE id = ?`,
-      [metadata.title, metadata.artist, metadata.creator, search, revisionId, now, legacy ? 0 : 1, projectId],
+       current_revision_id = ?, updated_at = ?, metadata_ready = ?, difficulties = ?, chart_info = ? WHERE id = ?`,
+      [metadata.title, metadata.artist, metadata.creator, search, revisionId, now, legacy ? 0 : 1,
+        legacy ? null : JSON.stringify(metadata.difficulties ?? []), legacy ? null : JSON.stringify(metadata.chartInfo ?? { levels: {}, labels: {} }), projectId],
     );
     this.db.run(
       `UPDATE submissions SET dirty = 1, version = version + 1
@@ -266,7 +282,7 @@ export class Registry {
   }
 
   needsMetadata() {
-    return this.db.query<Project, []>(`${this.projectQuery} WHERE p.metadata_ready = 0`).all();
+    return this.db.query<Project, []>(`${this.projectQuery} WHERE p.metadata_ready = 0 OR p.difficulties IS NULL OR p.chart_info IS NULL`).all();
   }
 
   enrich(id: string, metadata: Metadata) {
@@ -274,14 +290,26 @@ export class Registry {
   }
 
   private updateMetadata(id: string, metadata: Metadata) {
+    const current = this.db.query<Project, [string]>(`${this.projectQuery} WHERE r.submission_id = ?`).get(id);
+    if (current?.metadata_ready === 1) {
+      this.db.run("UPDATE projects SET chart_info = ? WHERE id = ? AND chart_info IS NULL", [
+        JSON.stringify(metadata.chartInfo ?? { levels: {}, labels: {} }), current.id,
+      ]);
+      this.db.run("UPDATE projects SET difficulties = ? WHERE id = ? AND difficulties IS NULL", [
+        JSON.stringify(metadata.difficulties ?? []), current.id,
+      ]);
+      return;
+    }
     this.db.run(
-      `UPDATE projects SET title = ?, artist = ?, creator = ?, search_text = ?, metadata_ready = 1
+      `UPDATE projects SET title = ?, artist = ?, creator = ?, search_text = ?, metadata_ready = 1, difficulties = ?, chart_info = ?
         WHERE metadata_ready = 0 AND current_revision_id IN (SELECT id FROM revisions WHERE submission_id = ?)`,
       [
         metadata.title,
         metadata.artist,
         metadata.creator,
         searchText(`${metadata.title} ${metadata.artist} ${metadata.creator} ${metadata.search}`),
+        JSON.stringify(metadata.difficulties ?? []),
+        JSON.stringify(metadata.chartInfo ?? { levels: {}, labels: {} }),
         id,
       ],
     );

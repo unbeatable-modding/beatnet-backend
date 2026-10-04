@@ -1,4 +1,5 @@
 import type { Catalog } from "./catalog";
+import { streamAudio } from "./preview";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -47,8 +48,8 @@ async function download(request: Request, catalog: Catalog, projectId: string, r
 }
 
 export async function handleRequest(request: Request, discordReady: boolean, storageReady: boolean, catalog: Catalog): Promise<Response> {
-  if (request.method !== "GET") {
-    return Response.json({ error: "method_not_allowed" }, { status: 405, headers: { Allow: "GET" } });
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return Response.json({ error: "method_not_allowed" }, { status: 405, headers: { Allow: "GET, HEAD" } });
   }
 
   const url = new URL(request.url);
@@ -69,7 +70,7 @@ export async function handleRequest(request: Request, discordReady: boolean, sto
     );
   }
 
-  const match = /^\/api\/beatmaps\/([^/]+)(?:\/revisions\/([^/]+)\/files\/([^/]+))?$/.exec(path);
+  const match = /^\/api\/beatmaps\/([^/]+)(?:\/revisions\/([^/]+)\/(?:files\/([^/]+)|(preview)))?$/.exec(path);
   if (path !== "/api/beatmaps" && !match) {
     return json({ error: "not_found" }, 404);
   }
@@ -90,6 +91,10 @@ export async function handleRequest(request: Request, discordReady: boolean, sto
     }
     if (revisionId && fileId) {
       return await download(request, catalog, projectId, revisionId, fileId);
+    }
+    if (revisionId && match?.[4]) {
+      const audio = await catalog.audio(projectId, revisionId);
+      return audio ? await streamAudio(request, audio) : json({ error: "preview_unavailable" }, 404);
     }
     const beatmap = catalog.get(projectId);
     return beatmap ? json(beatmap) : json({ error: "not_found" }, 404);
