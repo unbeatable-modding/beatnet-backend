@@ -55,7 +55,9 @@ export class Library {
         const attachments = await getAttachments();
         const manifest = await this.uploads.save(submission, attachments);
         const metadata = await readMetadata(this.uploads, manifest, submission.author_name ?? "");
-        return this.submissions.complete(id, manifest.files, metadata);
+        const revision = this.submissions.complete(id, manifest.files, metadata);
+        await this.removeOldFiles(revision.project_id);
+        return revision;
       } catch (error) {
         this.submissions.fail(id, error instanceof Error ? error.message : "Upload failed");
         throw error;
@@ -74,6 +76,17 @@ export class Library {
 
   recover() {
     return this.exclusive(() => this.recoverStorage());
+  }
+
+  private async removeOldFiles(projectId?: string) {
+    for (const revision of this.submissions.registry.obsolete(projectId)) {
+      try {
+        await this.uploads.remove(revision.submission_id);
+        this.submissions.removeOldFiles(revision.submission_id);
+      } catch {
+        console.warn(`cannot remove old beatmap files ${revision.submission_id}`);
+      }
+    }
   }
 
   private async recoverStorage() {
@@ -98,6 +111,7 @@ export class Library {
         continue;
       }
     }
+    await this.removeOldFiles();
   }
 
   private async recoverSubmission(submission: Submission) {

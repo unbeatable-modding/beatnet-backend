@@ -1,5 +1,6 @@
 import type { Catalog } from "./catalog";
 import { streamAudio } from "./preview";
+import { streamCover } from "./cover";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -70,7 +71,7 @@ export async function handleRequest(request: Request, discordReady: boolean, sto
     );
   }
 
-  const match = /^\/api\/beatmaps\/([^/]+)(?:\/revisions\/([^/]+)\/(?:files\/([^/]+)|(preview)))?$/.exec(path);
+  const match = /^\/api\/beatmaps\/([^/]+)(?:\/revisions\/([^/]+)\/(?:files\/([^/]+)|(preview|cover)))?$/.exec(path);
   if (path !== "/api/beatmaps" && !match) {
     return json({ error: "not_found" }, 404);
   }
@@ -92,7 +93,11 @@ export async function handleRequest(request: Request, discordReady: boolean, sto
     if (revisionId && fileId) {
       return await download(request, catalog, projectId, revisionId, fileId);
     }
-    if (revisionId && match?.[4]) {
+    if (revisionId && match?.[4] === "cover") {
+      const cover = await catalog.cover(projectId, revisionId);
+      return cover ? await streamCover(request, cover) : json({ error: "cover_unavailable" }, 404);
+    }
+    if (revisionId && match?.[4] === "preview") {
       const audio = await catalog.audio(projectId, revisionId);
       return audio ? await streamAudio(request, audio) : json({ error: "preview_unavailable" }, 404);
     }

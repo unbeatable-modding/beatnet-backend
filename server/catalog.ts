@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import type { Metadata, Project } from "./registry";
 import { extractAudio, previewClip } from "./preview";
+import { prepareCover } from "./cover";
 import type { Submissions } from "./submissions";
 import type { Uploads } from "./uploads";
 
@@ -15,6 +16,7 @@ function describeBeatmap(project: Project) {
     difficulties: project.difficulties ? JSON.parse(project.difficulties) as string[] : [],
     levels: info?.levels ?? {},
     difficultyLabels: info?.labels ?? {},
+    cover: info?.cover ? `/api/beatmaps/${project.id}/revisions/${project.current_revision_id}/cover` : null,
     preview: info?.preview ? {
       url: `/api/beatmaps/${project.id}/revisions/${project.current_revision_id}/preview`,
       start: info.preview.start,
@@ -68,6 +70,9 @@ export class Catalog {
   }
 
   download(projectId: string, revisionId: string, fileId: string) {
+    if (this.submissions.registry.get(projectId)?.current_revision_id !== revisionId) {
+      return null;
+    }
     const revision = this.submissions.registry.byRevision(revisionId);
     if (!revision || revision.project_id !== projectId || this.submissions.get(revision.submission_id)?.status !== "accepted") {
       return null;
@@ -91,5 +96,22 @@ export class Catalog {
     const stored = this.download(projectId, revisionId, info.preview.fileId);
     const audio = stored ? await extractAudio(stored.path, stored.sha256, info.preview.path) : null;
     return audio ? previewClip(audio, info.preview.start) : null;
+  }
+
+  async cover(projectId: string, revisionId: string) {
+    const revision = this.submissions.registry.byRevision(revisionId);
+    if (!revision || revision.project_id !== projectId) {
+      return null;
+    }
+    const project = this.submissions.registry.get(projectId);
+    if (project?.current_revision_id !== revisionId || !project.chart_info) {
+      return null;
+    }
+    const info = JSON.parse(project.chart_info) as Metadata["chartInfo"];
+    if (!info?.cover) {
+      return null;
+    }
+    const stored = this.download(projectId, revisionId, info.cover.fileId);
+    return stored ? prepareCover(stored.path, stored.sha256, info.cover.path) : null;
   }
 }

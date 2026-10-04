@@ -44,7 +44,7 @@ try {
     hostname: config.httpHost,
     port: config.httpPort,
     fetch: async (request, http) => {
-      if (new URL(request.url).pathname.endsWith("/preview")) {
+      if (/\/(preview|cover)$/.test(new URL(request.url).pathname)) {
         http.timeout(request, 60);
       }
       const discordReady = discord.client.isReady();

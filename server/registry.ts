@@ -10,6 +10,7 @@ export type Metadata = {
     levels: Record<string, number>;
     labels: Record<string, string>;
     preview?: { fileId: string; path: string; start: number };
+    cover?: { fileId: string; path: string } | null;
   };
 };
 export type Project = {
@@ -271,6 +272,14 @@ export class Registry {
     return this.db.query<Revision, [string]>("SELECT * FROM revisions WHERE id = ?").get(id);
   }
 
+  obsolete(projectId?: string) {
+    return this.db.query<{ submission_id: string }, [string | null, string | null]>(
+      `SELECT r.submission_id FROM revisions r JOIN projects p ON p.id = r.project_id
+       WHERE r.id != p.current_revision_id AND (? IS NULL OR p.id = ?)
+       AND EXISTS (SELECT 1 FROM files f WHERE f.submission_id = r.submission_id)`,
+    ).all(projectId ?? null, projectId ?? null);
+  }
+
   origin(id: string) {
     return this.db
       .query<SubmissionOrigin, [string]>(
@@ -282,7 +291,8 @@ export class Registry {
   }
 
   needsMetadata() {
-    return this.db.query<Project, []>(`${this.projectQuery} WHERE p.metadata_ready = 0 OR p.difficulties IS NULL OR p.chart_info IS NULL`).all();
+    return this.db.query<Project, []>(`${this.projectQuery} WHERE p.metadata_ready = 0 OR p.difficulties IS NULL OR p.chart_info IS NULL
+      OR json_type(p.chart_info, '$.cover') IS NULL`).all();
   }
 
   enrich(id: string, metadata: Metadata) {
@@ -292,7 +302,7 @@ export class Registry {
   private updateMetadata(id: string, metadata: Metadata) {
     const current = this.db.query<Project, [string]>(`${this.projectQuery} WHERE r.submission_id = ?`).get(id);
     if (current?.metadata_ready === 1) {
-      this.db.run("UPDATE projects SET chart_info = ? WHERE id = ? AND chart_info IS NULL", [
+      this.db.run("UPDATE projects SET chart_info = ? WHERE id = ? AND (chart_info IS NULL OR json_type(chart_info, '$.cover') IS NULL)", [
         JSON.stringify(metadata.chartInfo ?? { levels: {}, labels: {} }), current.id,
       ]);
       this.db.run("UPDATE projects SET difficulties = ? WHERE id = ? AND difficulties IS NULL", [

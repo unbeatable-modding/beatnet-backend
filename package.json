@@ -11,7 +11,6 @@
     "start": "bun server/index.ts",
     "dev": "bun --watch server/index.ts",
     "remove": "bun server/remove.ts",
-    "test": "bun test",
     "typecheck": "bun ./node_modules/typescript/bin/tsc --noEmit"
   },
   "dependencies": {
@@ -22,7 +21,6 @@
   "devDependencies": {
     "@types/bun": "1.4.2",
     "@types/yauzl-promise": "4.0.1",
-    "fflate": "0.8.3",
     "typescript": "7.0.2"
   }
 }

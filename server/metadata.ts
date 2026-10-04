@@ -1,6 +1,7 @@
 import { open } from "yauzl-promise";
 import type { Metadata } from "./registry";
 import type { Manifest, Uploads } from "./uploads";
+import { prepareCover, validCoverPath } from "./cover";
 
 const slots = ["Beginner", "Easy", "Normal", "Hard", "UNBEATABLE", "Star"];
 
@@ -72,20 +73,27 @@ export async function readMetadata(uploads: Uploads, manifest: Manifest, submitt
   const creators = new Set<string>();
   const names: string[] = [];
   const difficulties = new Set<string>();
-  const chartInfo: NonNullable<Metadata["chartInfo"]> = { levels: {}, labels: {} };
+  const chartInfo: NonNullable<Metadata["chartInfo"]> = { levels: {}, labels: {}, cover: null };
 
   for (const stored of manifest.files) {
     names.push(stored.name);
     const path = uploads.path(manifest.submissionId, stored.file);
     try {
       const archive = await open(path);
+      const covers: string[] = [];
+      const directories = new Set<string>();
       try {
         for await (const entry of archive) {
+          const name = entry.filename.replace(/\\/g, "/");
+          if (validCoverPath(name)) {
+            covers.push(name);
+          }
           if (!/\.(txt|osu)$/i.test(entry.filename)) {
             continue;
           }
 
           const metadata = await readChart(await entry.openReadStream());
+          directories.add(name.split("/").slice(0, -1).join("/"));
           const difficulty = resolveDifficulty(entry.filename, metadata.version);
           if (difficulty) {
             difficulties.add(difficulty);
@@ -129,6 +137,18 @@ export async function readMetadata(uploads: Uploads, manifest: Manifest, submitt
         }
       } finally {
         await archive.close();
+      }
+      if (!chartInfo.cover) {
+        for (const directory of directories) {
+          const prefix = directory.length > 0 ? directory + "/" : "";
+          const cover = ["cover.png", "cover.jpg", "cover.jpeg"]
+            .map((filename) => covers.find((name) => name.toLowerCase() === (prefix + filename).toLowerCase()))
+            .find((name) => name !== undefined);
+          if (cover && await prepareCover(path, stored.sha256, cover)) {
+            chartInfo.cover = { fileId: stored.id, path: cover };
+            break;
+          }
+        }
       }
     } catch {
       console.warn(`cannot read metadata from ${stored.name}`);

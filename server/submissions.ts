@@ -70,6 +70,15 @@ export class Submissions {
     ).all(id);
   }
 
+  removeOldFiles(id: string) {
+    this.db.run(
+      `DELETE FROM files WHERE submission_id = ? AND submission_id IN (
+       SELECT r.submission_id FROM revisions r JOIN projects p ON p.id = r.project_id
+       WHERE r.id != p.current_revision_id)`,
+      [id],
+    );
+  }
+
   record(input: {
     guildId: string;
     channelId: string;
