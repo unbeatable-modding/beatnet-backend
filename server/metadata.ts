@@ -1,4 +1,5 @@
 import { open } from "yauzl-promise";
+import { createHash } from "node:crypto";
 import type { Metadata } from "./registry";
 import type { Manifest, Uploads } from "./uploads";
 import { prepareCover, validCoverPath } from "./cover";
@@ -64,7 +65,7 @@ async function readChart(stream: AsyncIterable<Buffer>) {
   }
 
   const text = Buffer.concat(chunks).toString("utf8").replace(/^\uFEFF/, "");
-  return readFields(text);
+  return { ...readFields(text), hash: createHash("sha256").update(text).digest("hex") } as Record<string, string> & { hash: string };
 }
 
 export async function readMetadata(uploads: Uploads, manifest: Manifest, submitter = ""): Promise<Metadata> {
@@ -73,7 +74,7 @@ export async function readMetadata(uploads: Uploads, manifest: Manifest, submitt
   const creators = new Set<string>();
   const names: string[] = [];
   const difficulties = new Set<string>();
-  const chartInfo: NonNullable<Metadata["chartInfo"]> = { levels: {}, labels: {}, cover: null };
+  const chartInfo: NonNullable<Metadata["chartInfo"]> = { levels: {}, labels: {}, cover: null, charts: [] };
 
   for (const stored of manifest.files) {
     names.push(stored.name);
@@ -96,6 +97,7 @@ export async function readMetadata(uploads: Uploads, manifest: Manifest, submitt
           directories.add(name.split("/").slice(0, -1).join("/"));
           const difficulty = resolveDifficulty(entry.filename, metadata.version);
           if (difficulty) {
+            chartInfo.charts!.push({ hash: metadata.hash, difficulty });
             difficulties.add(difficulty);
             if (!(difficulty in chartInfo.levels)) {
               let level = 0;

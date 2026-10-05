@@ -12,10 +12,13 @@ function readPage(url: URL) {
   const query = (url.searchParams.get("query") ?? "").trim();
   const offset = url.searchParams.get("offset") ?? "0";
   const limit = url.searchParams.get("limit") ?? "25";
+  const sorting = url.searchParams.get("sorting") ?? "title";
+  const difficulties = (url.searchParams.get("difficulties") ?? "").split(",").filter(Boolean);
+  if (sorting !== "title" && sorting !== "rating" || difficulties.length > 16 || difficulties.some(value => !/^[a-zA-Z0-9_-]{1,64}$/.test(value))) { return null; }
   if (query.length > 256 || !/^\d+$/.test(offset) || !/^\d+$/.test(limit)) {
     return null;
   }
-  const page = { query, offset: Number(offset), limit: Number(limit) };
+  const page = { query, offset: Number(offset), limit: Number(limit), sorting, difficulties };
   if (!Number.isSafeInteger(page.offset) || page.offset > 1_000_000 || page.limit < 1 || page.limit > 25) {
     return null;
   }
@@ -72,7 +75,7 @@ export async function handleRequest(request: Request, discordReady: boolean, sto
   }
 
   const match = /^\/api\/beatmaps\/([^/]+)(?:\/revisions\/([^/]+)\/(?:files\/([^/]+)|(preview|cover)))?$/.exec(path);
-  if (path !== "/api/beatmaps" && !match) {
+  if (path !== "/api/beatmaps" && path !== "/api/ratings" && !match) {
     return json({ error: "not_found" }, 404);
   }
   if (!storageReady) {
@@ -80,9 +83,13 @@ export async function handleRequest(request: Request, discordReady: boolean, sto
   }
 
   try {
+    if (path === "/api/ratings") {
+      const ids = (url.searchParams.get("ids") ?? "").split(",");
+      return ids.length <= 100 && ids.every(id => uuid.test(id)) ? json(catalog.ratings(ids)) : json({ error: "invalid_query" }, 400);
+    }
     if (path === "/api/beatmaps") {
       const page = readPage(url);
-      return page ? json(catalog.list(page.query, page.offset, page.limit)) : json({ error: "invalid_query" }, 400);
+      return page ? json(catalog.list(page.query, page.offset, page.limit, page.sorting, page.difficulties)) : json({ error: "invalid_query" }, 400);
     }
     const projectId = match?.[1];
     const revisionId = match?.[2];

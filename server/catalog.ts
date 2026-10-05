@@ -16,6 +16,8 @@ function describeBeatmap(project: Project) {
     difficulties: project.difficulties ? JSON.parse(project.difficulties) as string[] : [],
     levels: info?.levels ?? {},
     difficultyLabels: info?.labels ?? {},
+    rating: project.rating ?? 0,
+    ratingCount: project.rating_count ?? 0,
     cover: info?.cover ? `/api/beatmaps/${project.id}/revisions/${project.current_revision_id}/cover` : null,
     preview: info?.preview ? {
       url: `/api/beatmaps/${project.id}/revisions/${project.current_revision_id}/preview`,
@@ -37,9 +39,16 @@ export class Catalog {
     private readonly uploads: Uploads,
   ) {}
 
-  list(query: string, offset: number, limit: number) {
-    const result = this.submissions.registry.list(query, offset, limit);
+  list(query: string, offset: number, limit: number, sorting = "title", difficulties: string[] = []) {
+    const result = this.submissions.registry.list(query, offset, limit, "", sorting, difficulties);
     return { items: result.items.map(describeBeatmap), total: result.total, offset, limit };
+  }
+
+  ratings(ids: string[]) {
+    return { items: ids.map(id => {
+      const project = this.submissions.registry.get(id);
+      return { id, average: project?.rating ?? 0, count: project?.rating_count ?? 0 };
+    }) };
   }
 
   get(id: string) {

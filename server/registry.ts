@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { createRatings } from "./ratings";
 
 export type Metadata = {
   title: string;
@@ -9,6 +10,7 @@ export type Metadata = {
   chartInfo?: {
     levels: Record<string, number>;
     labels: Record<string, string>;
+    charts?: { hash: string; difficulty: string }[];
     preview?: { fileId: string; path: string; start: number };
     cover?: { fileId: string; path: string } | null;
   };
@@ -24,6 +26,8 @@ export type Project = {
   metadata_ready: number;
   difficulties: string | null;
   chart_info: string | null;
+  rating: number;
+  rating_count: number;
   created_at: string;
   updated_at: string;
 };
@@ -71,7 +75,10 @@ function searchText(value: string) {
 
 export class Registry {
   private readonly projectQuery = `SELECT p.id, p.title, p.artist, p.creator, p.submitter, p.current_revision_id,
-    r.number, p.metadata_ready, p.difficulties, p.chart_info, p.created_at, p.updated_at FROM projects p JOIN revisions r ON r.id = p.current_revision_id`;
+    r.number, p.metadata_ready, p.difficulties, p.chart_info, p.created_at, p.updated_at,
+    COALESCE((SELECT AVG(value) FROM ratings WHERE project_id = p.id), 0) AS rating,
+    (SELECT COUNT(*) FROM ratings WHERE project_id = p.id) AS rating_count
+    FROM projects p JOIN revisions r ON r.id = p.current_revision_id`;
 
   constructor(private readonly db: Database) {
     this.db.transaction(() => this.createTables()).immediate();
@@ -81,6 +88,7 @@ export class Registry {
   }
 
   private createTables() {
+    createRatings(this.db);
     this.db.run(`CREATE TABLE IF NOT EXISTS migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`);
     this.db.run(`CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY, title TEXT NOT NULL, artist TEXT NOT NULL, creator TEXT NOT NULL,
@@ -227,7 +235,7 @@ export class Registry {
     return this.revision(id)!;
   }
 
-  list(query = "", offset = 0, limit = 10, submitter = "") {
+  list(query = "", offset = 0, limit = 10, submitter = "", sorting = "title", difficulties: string[] = []) {
     const terms = searchText(query.trim()).split(/\s+/).filter(Boolean).slice(0, 8);
     const conditions = terms.map(() => "p.search_text LIKE ? ESCAPE '\\'");
     const args = terms.map((term) => `%${term.replace(/[\\%_]/g, "\\$&")}%`);
@@ -235,12 +243,16 @@ export class Registry {
       conditions.push("p.submitter_id = ?");
       args.push(submitter);
     }
+    if (difficulties.length) {
+      conditions.push(`EXISTS (SELECT 1 FROM json_each(COALESCE(p.difficulties, '[]')) WHERE value IN (${difficulties.map(() => "?").join(",")}))`);
+      args.push(...difficulties);
+    }
     const where = conditions.length ? conditions.join(" AND ") : "1 = 1";
     const total = this.db
       .query<{ count: number }, string[]>(`SELECT count(*) AS count FROM projects p WHERE ${where}`)
       .get(...args)!.count;
     const items = this.db
-      .query<Project, (string | number)[]>(`${this.projectQuery} WHERE ${where} ORDER BY p.title COLLATE NOCASE, p.id LIMIT ? OFFSET ?`)
+      .query<Project, (string | number)[]>(`${this.projectQuery} WHERE ${where} ORDER BY ${sorting === "rating" ? "rating DESC, " : ""}p.title COLLATE NOCASE, p.id LIMIT ? OFFSET ?`)
       .all(...args, Math.max(1, Math.min(25, limit)), Math.max(0, offset));
     return { items, total };
   }
@@ -292,7 +304,7 @@ export class Registry {
 
   needsMetadata() {
     return this.db.query<Project, []>(`${this.projectQuery} WHERE p.metadata_ready = 0 OR p.difficulties IS NULL OR p.chart_info IS NULL
-      OR json_type(p.chart_info, '$.cover') IS NULL`).all();
+      OR json_type(p.chart_info, '$.cover') IS NULL OR json_type(p.chart_info, '$.charts') IS NULL`).all();
   }
 
   enrich(id: string, metadata: Metadata) {
@@ -302,7 +314,7 @@ export class Registry {
   private updateMetadata(id: string, metadata: Metadata) {
     const current = this.db.query<Project, [string]>(`${this.projectQuery} WHERE r.submission_id = ?`).get(id);
     if (current?.metadata_ready === 1) {
-      this.db.run("UPDATE projects SET chart_info = ? WHERE id = ? AND (chart_info IS NULL OR json_type(chart_info, '$.cover') IS NULL)", [
+      this.db.run("UPDATE projects SET chart_info = ? WHERE id = ? AND (chart_info IS NULL OR json_type(chart_info, '$.cover') IS NULL OR json_type(chart_info, '$.charts') IS NULL)", [
         JSON.stringify(metadata.chartInfo ?? { levels: {}, labels: {} }), current.id,
       ]);
       this.db.run("UPDATE projects SET difficulties = ? WHERE id = ? AND difficulties IS NULL", [
