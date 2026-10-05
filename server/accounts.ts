@@ -118,6 +118,7 @@ export class Accounts {
   }
 
   private avatar(value: unknown) {
-    return typeof value === "string" && /^https:\/\/avatars\.(?:steamstatic\.com|akamai\.steamstatic\.com)\/[0-9a-f]{40}(?:_(?:full|medium))?\.jpg$/i.test(value) ? value : null;
+    if (typeof value !== "string" || !/^https:\/\/avatars\.(?:(?:akamai|fastly)\.)?steamstatic\.com\/[0-9a-f]{40}(?:_(?:full|medium))?\.jpg$/i.test(value)) { return null; }
+    return "https://avatars.steamstatic.com/" + value.slice(value.lastIndexOf("/") + 1).toLowerCase();
   }
 }
