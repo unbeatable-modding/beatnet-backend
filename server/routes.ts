@@ -19,7 +19,7 @@ function readPage(url: URL) {
     return null;
   }
   const page = { query, offset: Number(offset), limit: Number(limit), sorting, difficulties };
-  if (!Number.isSafeInteger(page.offset) || page.offset > 1_000_000 || page.limit < 1 || page.limit > 25) {
+  if (!Number.isSafeInteger(page.offset) || page.offset > 1_000_000 || page.limit < 1 || page.limit > 30) {
     return null;
   }
   return page;

@@ -253,7 +253,7 @@ export class Registry {
       .get(...args)!.count;
     const items = this.db
       .query<Project, (string | number)[]>(`${this.projectQuery} WHERE ${where} ORDER BY ${sorting === "rating" ? "rating DESC, " : ""}p.title COLLATE NOCASE, p.id LIMIT ? OFFSET ?`)
-      .all(...args, Math.max(1, Math.min(25, limit)), Math.max(0, offset));
+      .all(...args, Math.max(1, Math.min(30, limit)), Math.max(0, offset));
     return { items, total };
   }
 
