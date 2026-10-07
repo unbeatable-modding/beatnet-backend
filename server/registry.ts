@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { createRatings } from "./ratings";
+import { createDownloads } from "./downloads";
 
 export type Metadata = {
   title: string;
@@ -28,6 +29,7 @@ export type Project = {
   chart_info: string | null;
   rating: number;
   rating_count: number;
+  download_count: number;
   created_at: string;
   updated_at: string;
 };
@@ -77,7 +79,8 @@ export class Registry {
   private readonly projectQuery = `SELECT p.id, p.title, p.artist, p.creator, p.submitter, p.current_revision_id,
     r.number, p.metadata_ready, p.difficulties, p.chart_info, p.created_at, p.updated_at,
     COALESCE((SELECT AVG(value) FROM ratings WHERE project_id = p.id), 0) AS rating,
-    (SELECT COUNT(*) FROM ratings WHERE project_id = p.id) AS rating_count
+    (SELECT COUNT(*) FROM ratings WHERE project_id = p.id) AS rating_count,
+    (SELECT COUNT(*) FROM downloads WHERE project_id = p.id) AS download_count
     FROM projects p JOIN revisions r ON r.id = p.current_revision_id`;
 
   constructor(private readonly db: Database) {
@@ -89,6 +92,7 @@ export class Registry {
 
   private createTables() {
     createRatings(this.db);
+    createDownloads(this.db);
     this.db.run(`CREATE TABLE IF NOT EXISTS migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`);
     this.db.run(`CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY, title TEXT NOT NULL, artist TEXT NOT NULL, creator TEXT NOT NULL,

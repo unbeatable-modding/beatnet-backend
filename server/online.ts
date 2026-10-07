@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Accounts, digest, OnlineError } from "./accounts";
 import { Scores } from "./scores";
 import { Ratings } from "./ratings";
+import { Downloads } from "./downloads";
 
 type Envelope = { key?: string; iv: string; data: string; mac: string };
 
@@ -30,6 +31,7 @@ export class Online {
   readonly accounts: Accounts;
   readonly scores: Scores;
   readonly ratings: Ratings;
+  readonly downloads: Downloads;
   readonly publicKey: { modulus: string; exponent: string };
   private readonly limits = new Map<string, { until: number; count: number }>();
   private active = 0;
@@ -42,6 +44,7 @@ export class Online {
     this.accounts = new Accounts(db);
     this.scores = new Scores(db);
     this.ratings = new Ratings(db);
+    this.downloads = new Downloads(db);
     db.run("CREATE TABLE IF NOT EXISTS online_requests (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL)");
     db.run("CREATE TABLE IF NOT EXISTS revision_changes (id INTEGER PRIMARY KEY CHECK(id = 1), version INTEGER NOT NULL)");
     db.run("INSERT OR IGNORE INTO revision_changes VALUES (1, 0)");
@@ -155,6 +158,7 @@ export class Online {
       else if (input.action === "rating") { result = this.ratings.get(input, input.key ? this.accounts.user(input.key) : null); }
       else if (input.action === "ratings") { result = this.ratings.list(this.accounts.user(input.key)); }
       else if (input.action === "rate") { result = this.ratings.rate(input, this.accounts.user(input.key)); }
+      else if (input.action === "download") { result = this.downloads.track(input, this.accounts.user(input.key)); }
       else { throw new OnlineError("invalid_action"); }
       return Response.json(seal(result, key), { headers: { "Cache-Control": "no-store" } });
     } catch (error) {

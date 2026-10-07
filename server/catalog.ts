@@ -18,6 +18,7 @@ function describeBeatmap(project: Project) {
     difficultyLabels: info?.labels ?? {},
     rating: project.rating ?? 0,
     ratingCount: project.rating_count ?? 0,
+    downloadCount: project.download_count ?? 0,
     cover: info?.cover ? `/api/beatmaps/${project.id}/revisions/${project.current_revision_id}/cover` : null,
     preview: info?.preview ? {
       url: `/api/beatmaps/${project.id}/revisions/${project.current_revision_id}/preview`,
@@ -47,7 +48,7 @@ export class Catalog {
   ratings(ids: string[]) {
     return { items: ids.map(id => {
       const project = this.submissions.registry.get(id);
-      return { id, average: project?.rating ?? 0, count: project?.rating_count ?? 0 };
+      return { id, average: project?.rating ?? 0, count: project?.rating_count ?? 0, downloadCount: project?.download_count ?? 0 };
     }) };
   }
 
