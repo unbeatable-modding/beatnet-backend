@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { Metadata } from "./registry";
 import type { Manifest, Uploads } from "./uploads";
 import { prepareCover, validCoverPath } from "./cover";
+import { readScoring } from "./chartScore";
 
 const slots = ["Beginner", "Easy", "Normal", "Hard", "UNBEATABLE", "Star"];
 
@@ -65,7 +66,7 @@ async function readChart(stream: AsyncIterable<Buffer>) {
   }
 
   const text = Buffer.concat(chunks).toString("utf8").replace(/^\uFEFF/, "");
-  return { ...readFields(text), hash: createHash("sha256").update(text).digest("hex") } as Record<string, string> & { hash: string };
+  return { fields: readFields(text), hash: createHash("sha256").update(text).digest("hex"), scoring: readScoring(text) };
 }
 
 export async function readMetadata(uploads: Uploads, manifest: Manifest, submitter = ""): Promise<Metadata> {
@@ -93,18 +94,19 @@ export async function readMetadata(uploads: Uploads, manifest: Manifest, submitt
             continue;
           }
 
-          const metadata = await readChart(await entry.openReadStream());
+          const chart = await readChart(await entry.openReadStream());
+          const metadata = chart.fields;
           directories.add(name.split("/").slice(0, -1).join("/"));
           const difficulty = resolveDifficulty(entry.filename, metadata.version);
           if (difficulty) {
-            chartInfo.charts!.push({ hash: metadata.hash, difficulty });
+            let level = 0;
+            try {
+              const tags = JSON.parse(metadata.tags ?? "{}") as { Level?: number };
+              level = Number.isSafeInteger(tags.Level) && tags.Level! >= 0 ? tags.Level! : 0;
+            } catch {}
+            chartInfo.charts!.push({ hash: chart.hash, difficulty, level, scoring: chart.scoring });
             difficulties.add(difficulty);
             if (!(difficulty in chartInfo.levels)) {
-              let level = 0;
-              try {
-                const tags = JSON.parse(metadata.tags ?? "{}") as { Level?: number };
-                level = Number.isSafeInteger(tags.Level) && tags.Level! >= 0 ? tags.Level! : 0;
-              } catch {}
               chartInfo.levels[difficulty] = level;
               chartInfo.labels[difficulty] = metadata.version || difficulty;
             }

@@ -77,6 +77,23 @@ export class Scores {
       own: own ? { ...own, profile: metadata(own.profile) } : null, total, offset: start };
   }
 
+  own(input: Record<string, unknown>, user: Profile) {
+    const offset = input.offset ?? 0;
+    const limit = input.limit ?? 250;
+    if (!Number.isSafeInteger(offset) || (offset as number) < 0 || (offset as number) > 100000
+      || !Number.isSafeInteger(limit) || (limit as number) < 1 || (limit as number) > 250) { throw new OnlineError("invalid_query"); }
+    const query = `FROM scores s JOIN projects p ON p.id = s.project_id
+      WHERE s.user_id = ? AND s.revision_id = p.current_revision_id
+        AND EXISTS (SELECT 1 FROM json_each(p.chart_info, '$.charts')
+          WHERE json_extract(value, '$.hash') = s.chart AND json_extract(value, '$.difficulty') = s.difficulty)`;
+    const total = this.db.query<{ total: number }, [string]>(`SELECT COUNT(*) AS total ${query}`).get(user.id)!.total;
+    const items = this.db.query(`SELECT s.project_id AS projectId, s.revision_id AS revisionId, s.chart, s.difficulty, s.modifiers,
+      s.score, s.accuracy, s.max_combo AS maxCombo, s.cleared, s.no_miss AS noMiss, s.full_combo AS fullCombo,
+      s.perfect_combo AS perfectCombo ${query}
+      ORDER BY s.project_id, s.chart, s.difficulty, s.modifiers LIMIT ? OFFSET ?`).all(user.id, limit as number, offset as number);
+    return { items, total };
+  }
+
   highscores(input: Record<string, unknown>) {
     const { projectId, revisionId, modifiers } = input;
     if (typeof projectId !== "string" || typeof revisionId !== "string" || typeof modifiers !== "string"

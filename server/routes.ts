@@ -14,7 +14,8 @@ function readPage(url: URL) {
   const limit = url.searchParams.get("limit") ?? "25";
   const sorting = url.searchParams.get("sorting") ?? "title";
   const difficulties = (url.searchParams.get("difficulties") ?? "").split(",").filter(Boolean);
-  if (sorting !== "title" && sorting !== "rating" || difficulties.length > 16 || difficulties.some(value => !/^[a-zA-Z0-9_-]{1,64}$/.test(value))) { return null; }
+  if (!["title", "rating", "rating_low", "downloads", "downloads_low"].includes(sorting)
+    || difficulties.length > 16 || difficulties.some(value => !/^[a-zA-Z0-9_-]{1,64}$/.test(value))) { return null; }
   if (query.length > 256 || !/^\d+$/.test(offset) || !/^\d+$/.test(limit)) {
     return null;
   }

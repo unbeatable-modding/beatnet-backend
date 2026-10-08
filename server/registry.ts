@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { createRatings } from "./ratings";
 import { createDownloads } from "./downloads";
+import type { ChartScoring } from "./chartScore";
 
 export type Metadata = {
   title: string;
@@ -11,7 +12,7 @@ export type Metadata = {
   chartInfo?: {
     levels: Record<string, number>;
     labels: Record<string, string>;
-    charts?: { hash: string; difficulty: string }[];
+    charts?: { hash: string; difficulty: string; level?: number; scoring?: ChartScoring | null }[];
     preview?: { fileId: string; path: string; start: number };
     cover?: { fileId: string; path: string } | null;
   };
@@ -252,11 +253,13 @@ export class Registry {
       args.push(...difficulties);
     }
     const where = conditions.length ? conditions.join(" AND ") : "1 = 1";
+    const order = sorting === "rating" ? "rating DESC, " : sorting === "rating_low" ? "rating ASC, "
+      : sorting === "downloads" ? "download_count DESC, " : sorting === "downloads_low" ? "download_count ASC, " : "";
     const total = this.db
       .query<{ count: number }, string[]>(`SELECT count(*) AS count FROM projects p WHERE ${where}`)
       .get(...args)!.count;
     const items = this.db
-      .query<Project, (string | number)[]>(`${this.projectQuery} WHERE ${where} ORDER BY ${sorting === "rating" ? "rating DESC, " : ""}p.title COLLATE NOCASE, p.id LIMIT ? OFFSET ?`)
+      .query<Project, (string | number)[]>(`${this.projectQuery} WHERE ${where} ORDER BY ${order}p.title COLLATE NOCASE, p.id LIMIT ? OFFSET ?`)
       .all(...args, Math.max(1, Math.min(30, limit)), Math.max(0, offset));
     return { items, total };
   }
@@ -308,7 +311,8 @@ export class Registry {
 
   needsMetadata() {
     return this.db.query<Project, []>(`${this.projectQuery} WHERE p.metadata_ready = 0 OR p.difficulties IS NULL OR p.chart_info IS NULL
-      OR json_type(p.chart_info, '$.cover') IS NULL OR json_type(p.chart_info, '$.charts') IS NULL`).all();
+      OR json_type(p.chart_info, '$.cover') IS NULL OR json_type(p.chart_info, '$.charts') IS NULL
+      OR EXISTS (SELECT 1 FROM json_each(p.chart_info, '$.charts') WHERE json_type(value, '$.scoring') IS NULL)`).all();
   }
 
   enrich(id: string, metadata: Metadata) {
@@ -318,7 +322,8 @@ export class Registry {
   private updateMetadata(id: string, metadata: Metadata) {
     const current = this.db.query<Project, [string]>(`${this.projectQuery} WHERE r.submission_id = ?`).get(id);
     if (current?.metadata_ready === 1) {
-      this.db.run("UPDATE projects SET chart_info = ? WHERE id = ? AND (chart_info IS NULL OR json_type(chart_info, '$.cover') IS NULL OR json_type(chart_info, '$.charts') IS NULL)", [
+      this.db.run(`UPDATE projects SET chart_info = ? WHERE id = ? AND (chart_info IS NULL OR json_type(chart_info, '$.cover') IS NULL OR json_type(chart_info, '$.charts') IS NULL
+        OR EXISTS (SELECT 1 FROM json_each(chart_info, '$.charts') WHERE json_type(value, '$.scoring') IS NULL))`, [
         JSON.stringify(metadata.chartInfo ?? { levels: {}, labels: {} }), current.id,
       ]);
       this.db.run("UPDATE projects SET difficulties = ? WHERE id = ? AND difficulties IS NULL", [

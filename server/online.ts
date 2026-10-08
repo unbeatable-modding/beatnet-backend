@@ -6,6 +6,7 @@ import { Accounts, digest, OnlineError } from "./accounts";
 import { Scores } from "./scores";
 import { Ratings } from "./ratings";
 import { Downloads } from "./downloads";
+import { Beatpoints } from "./beatpoints";
 
 type Envelope = { key?: string; iv: string; data: string; mac: string };
 
@@ -32,6 +33,7 @@ export class Online {
   readonly scores: Scores;
   readonly ratings: Ratings;
   readonly downloads: Downloads;
+  readonly beatpoints: Beatpoints;
   readonly publicKey: { modulus: string; exponent: string };
   private readonly limits = new Map<string, { until: number; count: number }>();
   private active = 0;
@@ -45,6 +47,7 @@ export class Online {
     this.scores = new Scores(db);
     this.ratings = new Ratings(db);
     this.downloads = new Downloads(db);
+    this.beatpoints = new Beatpoints(db);
     db.run("CREATE TABLE IF NOT EXISTS online_requests (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL)");
     db.run("CREATE TABLE IF NOT EXISTS revision_changes (id INTEGER PRIMARY KEY CHECK(id = 1), version INTEGER NOT NULL)");
     db.run("INSERT OR IGNORE INTO revision_changes VALUES (1, 0)");
@@ -152,7 +155,10 @@ export class Online {
       } else if (input.action === "me") { result = { user: this.accounts.user(input.key) }; }
       else if (input.action === "profile") { result = this.accounts.update(input, this.accounts.user(input.key)); }
       else if (input.action === "logout") { result = this.accounts.logout(input.key); }
-      else if (input.action === "submit") { result = this.scores.submit(input, this.accounts.user(input.key)); }
+      else if (input.action === "submit") { result = this.beatpoints.submit(this.scores, input, this.accounts.user(input.key)); }
+      else if (input.action === "scores") { result = this.scores.own(input, this.accounts.user(input.key)); }
+      else if (input.action === "beatpoints") { result = this.beatpoints.own(this.accounts.user(input.key)); }
+      else if (input.action === "bp_leaderboard") { result = this.beatpoints.list(input, input.key ? this.accounts.user(input.key) : null); }
       else if (input.action === "leaderboard") { result = this.scores.list(input, input.key ? this.accounts.user(input.key) : null); }
       else if (input.action === "highscores") { result = this.scores.highscores(input); }
       else if (input.action === "rating") { result = this.ratings.get(input, input.key ? this.accounts.user(input.key) : null); }
