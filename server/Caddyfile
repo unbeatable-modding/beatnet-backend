@@ -1,0 +1,18 @@
+{
+	auto_https disable_redirects
+	servers {
+		protocols h1 h2
+	}
+}
+
+api.beatnet.net {
+	tls {
+		issuer acme https://acme-v02.api.letsencrypt.org/directory {
+			disable_http_challenge
+		}
+	}
+
+	reverse_proxy 127.0.0.1:3000 {
+		header_up X-Real-IP {remote_host}
+	}
+}
