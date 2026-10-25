@@ -240,7 +240,7 @@ export class Registry {
     return this.revision(id)!;
   }
 
-  list(query = "", offset = 0, limit = 10, submitter = "", sorting = "title", difficulties: string[] = []) {
+  list(query = "", offset = 0, limit = 10, submitter = "", sorting = "title", difficulties: string[] = [], descending?: boolean) {
     const terms = searchText(query.trim()).split(/\s+/).filter(Boolean).slice(0, 8);
     const conditions = terms.map(() => "p.search_text LIKE ? ESCAPE '\\'");
     const args = terms.map((term) => `%${term.replace(/[\\%_]/g, "\\$&")}%`);
@@ -253,13 +253,15 @@ export class Registry {
       args.push(...difficulties);
     }
     const where = conditions.length ? conditions.join(" AND ") : "1 = 1";
-    const order = sorting === "rating" ? "rating DESC, " : sorting === "rating_low" ? "rating ASC, "
-      : sorting === "downloads" ? "download_count DESC, " : sorting === "downloads_low" ? "download_count ASC, " : "";
+    const column = sorting === "rating" || sorting === "rating_low" ? "rating"
+      : sorting === "downloads" || sorting === "downloads_low" ? "download_count"
+      : sorting === "created" || sorting === "created_low" ? "p.created_at" : "p.title COLLATE NOCASE";
+    const direction = (descending ?? (sorting !== "title" && !sorting.endsWith("_low"))) ? "DESC" : "ASC";
     const total = this.db
       .query<{ count: number }, string[]>(`SELECT count(*) AS count FROM projects p WHERE ${where}`)
       .get(...args)!.count;
     const items = this.db
-      .query<Project, (string | number)[]>(`${this.projectQuery} WHERE ${where} ORDER BY ${order}p.title COLLATE NOCASE, p.id LIMIT ? OFFSET ?`)
+      .query<Project, (string | number)[]>(`${this.projectQuery} WHERE ${where} ORDER BY ${column} ${direction}, p.title COLLATE NOCASE, p.id LIMIT ? OFFSET ?`)
       .all(...args, Math.max(1, Math.min(30, limit)), Math.max(0, offset));
     return { items, total };
   }

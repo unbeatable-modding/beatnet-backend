@@ -13,13 +13,16 @@ function readPage(url: URL) {
   const offset = url.searchParams.get("offset") ?? "0";
   const limit = url.searchParams.get("limit") ?? "25";
   const sorting = url.searchParams.get("sorting") ?? "title";
+  const direction = url.searchParams.get("descending");
   const difficulties = (url.searchParams.get("difficulties") ?? "").split(",").filter(Boolean);
-  if (!["title", "rating", "rating_low", "downloads", "downloads_low"].includes(sorting)
+  if (!["title", "rating", "rating_low", "downloads", "downloads_low", "created", "created_low"].includes(sorting)
+    || direction !== null && direction !== "true" && direction !== "false"
     || difficulties.length > 16 || difficulties.some(value => !/^[a-zA-Z0-9_-]{1,64}$/.test(value))) { return null; }
   if (query.length > 256 || !/^\d+$/.test(offset) || !/^\d+$/.test(limit)) {
     return null;
   }
-  const page = { query, offset: Number(offset), limit: Number(limit), sorting, difficulties };
+  const page = { query, offset: Number(offset), limit: Number(limit), sorting, difficulties,
+    descending: direction === null ? undefined : direction === "true" };
   if (!Number.isSafeInteger(page.offset) || page.offset > 1_000_000 || page.limit < 1 || page.limit > 30) {
     return null;
   }
@@ -90,7 +93,7 @@ export async function handleRequest(request: Request, discordReady: boolean, sto
     }
     if (path === "/api/beatmaps") {
       const page = readPage(url);
-      return page ? json(catalog.list(page.query, page.offset, page.limit, page.sorting, page.difficulties)) : json({ error: "invalid_query" }, 400);
+      return page ? json(catalog.list(page.query, page.offset, page.limit, page.sorting, page.difficulties, page.descending)) : json({ error: "invalid_query" }, 400);
     }
     const projectId = match?.[1];
     const revisionId = match?.[2];
