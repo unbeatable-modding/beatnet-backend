@@ -40,8 +40,8 @@ export class Catalog {
     private readonly uploads: Uploads,
   ) {}
 
-  list(query: string, offset: number, limit: number, sorting = "title", difficulties: string[] = [], descending?: boolean) {
-    const result = this.submissions.registry.list(query, offset, limit, "", sorting, difficulties, descending);
+  list(query: string, offset: number, limit: number, sorting = "title", difficulties: string[] = []) {
+    const result = this.submissions.registry.list(query, offset, limit, "", sorting, difficulties);
     return { items: result.items.map(describeBeatmap), total: result.total, offset, limit };
   }
 
